@@ -236,9 +236,6 @@ public class TrackedCameraScript : MonoBehaviour {
 		}*/
 
 		for (int i = 0; i < intPosClone [0]; i++) {
-			//Debug.Log ("i: " +i);
-			//Debug.Log ("First: " +intPosClone [0]);
-			//Debug.Log ("Length:" + intPosClone.Length);
 			int x = intPosClone [(4 * i) + 1];
 			int y = intPosClone [(4 * i) + 2];
 			int w = intPosClone [(4 * i) + 3];
@@ -277,19 +274,19 @@ public class TrackedCameraScript : MonoBehaviour {
 		}
 
 		if (floatPos [4] == 0) {
-			sphere2.localPosition = new Vector3 (0, 0, -1.0f);
+			sphere3.localPosition = new Vector3 (0, 0, -1.0f);
 		} else {
-			sphere2.localPosition = new Vector3 (floatPos [4], -floatPos [5], 1.0f);
+			sphere3.localPosition = new Vector3 (floatPos [4], -floatPos [5], 1.0f);
 		}
 		if (floatPos [6] == 0) {
-			sphere2.localPosition = new Vector3 (0, 0, -1.0f);
+			sphere4.localPosition = new Vector3 (0, 0, -1.0f);
 		} else {
-			sphere2.localPosition = new Vector3 (floatPos [6], -floatPos [7], 1.0f);
+			sphere4.localPosition = new Vector3 (floatPos [6], -floatPos [7], 1.0f);
 		}
 		if (floatPos [8] == 0) {
-			sphere2.localPosition = new Vector3 (0, 0, -1.0f);
+			sphere5.localPosition = new Vector3 (0, 0, -1.0f);
 		} else {
-			sphere2.localPosition = new Vector3 (floatPos [8], -floatPos [9], 1.0f);
+			sphere5.localPosition = new Vector3 (floatPos [8], -floatPos [9], 1.0f);
 		}
 
 		/* Debug.Log("String: [" + string.Join(",",stringPos)+"]");

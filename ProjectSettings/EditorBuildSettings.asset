@@ -4,4 +4,10 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Scenes/Game.unity
+    guid: e823e573a604765459bc417243cd46b1
+  - enabled: 1
+    path: Assets/SteamVR/Extras/SteamVR_TestTrackedCamera.unity
+    guid: 7fb811b0ffe615b4dbf1d5e6ced385fd
