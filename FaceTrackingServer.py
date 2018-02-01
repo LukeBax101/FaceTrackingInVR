@@ -76,112 +76,146 @@ q = win32pipe.CreateNamedPipe(r'\\.\pipe\IncomingData',
     win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_WAIT,
     1, 65536, 65536,300,None)
 
+
+
 win32pipe.ConnectNamedPipe(p, None)
 win32pipe.ConnectNamedPipe(q, None)
 
 first = True
 newimg = 0
 #time.sleep(15)
-while (True):
+running = True
+while (running):
+    try:
+        data = win32file.ReadFile(p, 112608000)
+    except:
+        print("Pipe Closed")
+        running = False
     
-    data = win32file.ReadFile(p, 112608000)
     byteData = list(data[1])
 
-    #print(getLast(byteData))
-
-    
-    #image = Image.open(io.BytesIO(byteData))
-    
-    stream = io.BytesIO(data[1])
-
-    imgage = Image.open(stream)
-    #draw = ImageDraw.Draw(img)
-    #font = ImageFont.truetype("arial.ttf",14)
-    #draw.text((0, 220),"This is a test11",(255,255,0),font=font)
-    #draw = ImageDraw.Draw(img)
-    #img.save("a_test.png")
-    
-    #root = Tk()
-    #canvas = Canvas(root, width=500, height=500)
-    #canvas.pack()
-    # = PhotoImage(imgage)
-    #canvas.create_image(250, 250, image=imgage)
-    #root.mainloop()
-
-
-    # Convert rawImage to Mat
-    #pilImage = Image.open(StringIO(rawImage));
-    # Create a black image
-    #img = np.zeros((512,512,3), np.uint8)
-
-    # Draw a diagonal blue line with thickness of 5 px
-    #cv2.line(img,(0,0),(511,511),(255,0,0),5)
-
-    img = np.array(imgage)
-    RGB_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    newimg = cv2.flip( RGB_img, 0 )
-
-    
-    #cv2.rectangle(newimg,(50,50),(100,100),(0,255,0),1)
-
-    gray = cv2.cvtColor(newimg, cv2.COLOR_BGR2GRAY)
-    
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-
-    outdata = [len(faces)]
-    print("Faces: " + str(faces))
-    for (x,y,w,h) in faces:
-        cv2.rectangle(newimg,(x,y),(x+w,y+h),(255,0,0),2)
-        roi_gray = gray[y:y+h, x:x+w]
-        roi_color = newimg[y:y+h, x:x+w]
-        eyes = eye_cascade.detectMultiScale(roi_gray)
-        for (ex,ey,ew,eh) in eyes:
-            cv2.rectangle(roi_color,(ex,ey),(ex+ew,ey+eh),(0,255,0),2)
-        outdata = outdata + [x,y,w,h]
-    #faces = []
-    #b = bytearray(outdata,"ascii")
-    fmt = ""
-    for i in range(len(outdata)):
-        fmt = fmt + "i"
-    print(fmt)
-    bi = struct.pack(fmt,*outdata)
-    #print("Sent: " +outdata)
-    win32file.WriteFile(q, bi)
-    #rows = img.shape[0]
-    #cols = img.shape[1]
-
-    #M = cv2.getRotationMatrix2D((cols/2,rows/2),180,1)
-    #dst = cv2.warpAffine(img,M,(cols,rows))
-    
-
-    #show it
-    #cv2.NamedWindow('display')
-    #cv2.MoveWindow('display', 10, 10)
-    #cv2.ShowImage('display', img)
-    #cv.WaitKey(0)
-    #newimg = cv2.flip( dst, 1 )
-
-    if (first):
-        #cv2.destroyAllWindows()
-        first = False
-        threading.Thread(target=loop).start()
-    
-    #while():
-   #     cv2.imshow('image',newimg)
-     #   cv2.waitKey(1)
+    if len(byteData) < 100:
+       #print("Possible end message")
+        print(bytes(byteData))
+        tear = "Return tear down"
+        tearBytes = bytes(tear,"ascii")
+        tearFmt = ""
+        for i in range(len(tearBytes)):
+            tearFmt = tearFmt + "i"
+        tearBi = struct.pack(tearFmt,*tearBytes)
+        win32file.WriteFile(q, tearBi)
+        print("Sent")
+        #time.sleep(5)
+        #running = False
+    else:
+        #print(getLast(byteData))
 
         
-    #cv2.destroyAllWindows()
-    #i = i+1
-    #print("Here")
+        #image = Image.open(io.BytesIO(byteData))
+        
+        stream = io.BytesIO(data[1])
 
-    
-    #if data[0] == 0:
-        #byteData = data[1].decode('utf-32',"backslashreplace")
-        #print(byteData[0])
-        #print(data[1][0:100])
-        #b_array = bytearray(data[1],'ascii',"backslashreplace")
-        #for elem in b_array:
-            #print(elem)
-    #else:
-      #print('ERROR', data[0])
+        imgage = Image.open(stream)
+        #draw = ImageDraw.Draw(img)
+        #font = ImageFont.truetype("arial.ttf",14)
+        #draw.text((0, 220),"This is a test11",(255,255,0),font=font)
+        #draw = ImageDraw.Draw(img)
+        #img.save("a_test.png")
+        
+        #root = Tk()
+        #canvas = Canvas(root, width=500, height=500)
+        #canvas.pack()
+        # = PhotoImage(imgage)
+        #canvas.create_image(250, 250, image=imgage)
+        #root.mainloop()
+
+
+        # Convert rawImage to Mat
+        #pilImage = Image.open(StringIO(rawImage));
+        # Create a black image
+        #img = np.zeros((512,512,3), np.uint8)
+
+        # Draw a diagonal blue line with thickness of 5 px
+        #cv2.line(img,(0,0),(511,511),(255,0,0),5)
+
+        img = np.array(imgage)
+        RGB_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        newimg = cv2.flip( RGB_img, 0 )
+
+        
+        #cv2.rectangle(newimg,(50,50),(100,100),(0,255,0),1)
+
+        gray = cv2.cvtColor(newimg, cv2.COLOR_BGR2GRAY)
+        
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+
+
+
+        outdata = [len(faces)]
+        #print("Faces: " + str(faces))
+        for (x,y,w,h) in faces:
+            cv2.rectangle(newimg,(x,y),(x+w,y+h),(255,0,0),2)
+            roi_gray = gray[y:y+h, x:x+w]
+            roi_color = newimg[y:y+h, x:x+w]
+            eyes = eye_cascade.detectMultiScale(roi_gray)
+            for (ex,ey,ew,eh) in eyes:
+               cv2.rectangle(roi_color,(ex,ey),(ex+ew,ey+eh),(0,255,0),2)
+               
+            outdata = outdata + [int(x + (w / 2)),int(y + (h / 2)),(400-(2*h)),100]
+
+        #outdata = [3,100,150,300,100,300,300,100,150,450,300,400,75]
+
+
+
+            
+        #faces = []
+        #b = bytearray(outdata,"ascii")
+        fmt = ""
+        for i in range(len(outdata)):
+            fmt = fmt + "i"
+        #print(fmt)
+        bi = struct.pack(fmt,*outdata)
+        #print("Sent: " +outdata)
+        if (running):
+            win32file.WriteFile(q, bi)
+        #rows = img.shape[0]
+        #cols = img.shape[1]
+
+        #M = cv2.getRotationMatrix2D((cols/2,rows/2),180,1)
+        #dst = cv2.warpAffine(img,M,(cols,rows))
+        
+
+        #show it
+        #cv2.NamedWindow('display')
+        #cv2.MoveWindow('display', 10, 10)
+        #cv2.ShowImage('display', img)
+        #cv.WaitKey(0)
+        #newimg = cv2.flip( dst, 1 )
+
+        if (first):
+            #cv2.destroyAllWindows()
+            first = False
+            threading.Thread(target=loop).start()
+        
+        #while():
+       #     cv2.imshow('image',newimg)
+         #   cv2.waitKey(1)
+
+            
+        #cv2.destroyAllWindows()
+        #i = i+1
+        #print("Here")
+
+        
+        #if data[0] == 0:
+            #byteData = data[1].decode('utf-32',"backslashreplace")
+            #print(byteData[0])
+            #print(data[1][0:100])
+            #b_array = bytearray(data[1],'ascii',"backslashreplace")
+            #for elem in b_array:
+                #print(elem)
+        #else:
+          #print('ERROR', data[0])
+
+
+print("Program ended")

@@ -5,7 +5,11 @@ using UnityEngine;
 public class ViveControllerInput : MonoBehaviour {
 
 	public TrackedCameraScript script1;
+	public GameObject planeLeft;
+	public GameObject planeRight;
+	public GameObject camPlane;
 	// 1
+	private bool showPlanes = true;
 	private SteamVR_TrackedObject trackedObj;
 	// 2
 	private SteamVR_Controller.Device Controller
@@ -45,7 +49,17 @@ public class ViveControllerInput : MonoBehaviour {
 		// 5
 		if (Controller.GetPressUp(SteamVR_Controller.ButtonMask.Grip))
 		{
-			//Debug.Log(gameObject.name + " Grip Release");
+			planeLeft.SetActive (!showPlanes);
+			planeRight.SetActive (!showPlanes);
+			camPlane.SetActive (!showPlanes);
+			showPlanes = !showPlanes;
+			Debug.Log(gameObject.name + " Grip Release");
 		}
+
+		if (Controller.GetPressDown (SteamVR_Controller.ButtonMask.ApplicationMenu)) {
+			//Debug.Log ("Application Button Pressed");
+			script1.tearDown ();
+		}
+
 	}
 }

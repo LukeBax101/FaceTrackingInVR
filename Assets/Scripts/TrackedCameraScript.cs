@@ -15,6 +15,11 @@ public class TrackedCameraScript : MonoBehaviour {
 
 	public uint index;
 	public Material mat;
+	public GameObject leftConnectedText;
+	public GameObject rightConnectedText;
+	public GameObject leftTrackingText;
+	public GameObject rightTrackingText;
+
 	CVRTrackedCamera trcam_instance = null;
 	ulong pTrackedCamera = 0;
 	IntPtr pBuffer = (IntPtr)null;
@@ -29,6 +34,7 @@ public class TrackedCameraScript : MonoBehaviour {
 	bool connected = false;
 	bool connectedIn = false;
 	NamedPipeClientStream server = null;
+	NamedPipeClientStream client = null;
 	Thread newThread = null;
 	bool finished = false;
 	string positions = "";
@@ -37,6 +43,8 @@ public class TrackedCameraScript : MonoBehaviour {
 	int[] intPos = { 0 };
 	uint width = 0;
 	uint height = 0;
+	bool closed = false;
+	//int[] intPos = new int[200/ 4];
 
 	void Start () {
 		bool pHasCamera = false;
@@ -73,9 +81,10 @@ public class TrackedCameraScript : MonoBehaviour {
 		}
 
 		//Client
-		var client = new NamedPipeClientStream("OutgoingFrame");
+		client = new NamedPipeClientStream("OutgoingFrame");
 		//var server = new NamedPipeClientStream (".", "IncdmingData", PipeDirection.InOut, PipeOptions.Asynchronous);
 		server = new NamedPipeClientStream ("IncomingData");
+
 
 		try {
 			client.Connect();
@@ -83,6 +92,7 @@ public class TrackedCameraScript : MonoBehaviour {
 			writer = new StreamWriter(client,Encoding.UTF8);
 			connected = true;
 			Debug.Log("Connected Out");
+
 		} catch (Exception to) {
 			Debug.Log("Cannot connect out!");
 		}
@@ -99,6 +109,17 @@ public class TrackedCameraScript : MonoBehaviour {
 		newThread = new Thread(doLoop);
 		newThread.Start ();
 
+		if (connected & connectedIn) {
+			Debug.Log ("Both are connected");
+			leftConnectedText.GetComponent<TextMesh> ().text = "IPC pipe connection to python established.";
+			rightConnectedText.GetComponent<TextMesh> ().text = "IPC pipe connection to python established.";
+		} else {
+			Debug.Log ("Connection Failed");
+			leftConnectedText.GetComponent<TextMesh> ().text = "Connection Failed... no pipes found.";
+			rightConnectedText.GetComponent<TextMesh> ().text = "Connection Failed... no pipes found.";
+		}
+			
+
 
 	}
 
@@ -108,24 +129,115 @@ public class TrackedCameraScript : MonoBehaviour {
 		intPos = new int[buf.Length / 4];
 		while (finished == false) {
 			//Debug.Log (finished);
+			try {
 			var line = reader.BaseStream.Read(buf,0,200);
-			//Debug.Log(BitConverter.ToString(buf));
-			//Debug.Log (buf [0]);
-			num = 0;
-			for (int i = 0; i < buf.Length; i = i + 4) {
-				num = buf [i] + (buf [i + 1] << 8) + (buf [i + 2] << 16) + (buf [i + 3] << 24);
-					//+ buf [i + 1] << 8 + buf [i + 2] << 16 + buf [i + 3] << 24;
-				intPos[i/4] = num;
-				//Debug.Log (num);
 			}
-			string[] stringArray = intPos.Select (i => i.ToString ()).ToArray ();
-			//Debug.Log(string.Join(",",stringArray));
-			//positions = System.Text.Encoding.ASCII.GetString (buf);
-			Array.Clear(buf, 0, buf.Length);
+			catch (Exception ex) {
+				Debug.Log ("Error Reading");
+			}
+			if (checkEnd (buf)) {
+				Debug.Log ("Return teardown heard");
+				finished = true;
+			} else {
+				//Debug.Log(BitConverter.ToString(buf));
+				//Debug.Log (buf [0]);
+				num = 0;
+				for (int i = 0; i < buf.Length; i = i + 4) {
+					num = buf [i] + (buf [i + 1] << 8) + (buf [i + 2] << 16) + (buf [i + 3] << 24);
+					//+ buf [i + 1] << 8 + buf [i + 2] << 16 + buf [i + 3] << 24;
+					intPos [i / 4] = num;
+					//Debug.Log (num);
+				}
+				string[] stringArray = intPos.Select (i => i.ToString ()).ToArray ();
+				//Debug.Log(string.Join(",",stringArray));
+				//positions = System.Text.Encoding.ASCII.GetString (buf);
+				Array.Clear (buf, 0, buf.Length);
+			}
 
 				
 		}
+		Debug.Log ("Closing reader and server");
+		try {
+			reader.Close ();
+			Debug.Log("Now closing server");
+			server.Close ();
+		} catch (Exception) {
+			Debug.Log ("Failed closing reader and server");
+		}
+		
+		Debug.Log ("Reader and server closed");
+
+		//UnityEditor.EditorApplication.isPlaying = false;
 		newThread.Abort ();
+		Debug.Log ("Thread aborted");
+
+	}
+
+	public void readIn() {
+		var buf= new byte[200];
+		int num = 0;
+
+		try {
+			Debug.Log("Attempting to read");
+			var line = reader.BaseStream.Read(buf,0,200);
+			Debug.Log("Successful read");
+
+			if (checkEnd (buf)) {
+				Debug.Log ("Return teardown heard");
+				finished = true;
+			} else {
+				//Debug.Log(BitConverter.ToString(buf));
+				//Debug.Log (buf [0]);
+				num = 0;
+				for (int i = 0; i < buf.Length; i = i + 4) {
+					num = buf [i] + (buf [i + 1] << 8) + (buf [i + 2] << 16) + (buf [i + 3] << 24);
+					//+ buf [i + 1] << 8 + buf [i + 2] << 16 + buf [i + 3] << 24;
+					intPos [i / 4] = num;
+					//Debug.Log (num);
+				}
+				string[] stringArray = intPos.Select (i => i.ToString ()).ToArray ();
+				Debug.Log(string.Join(",",stringArray));
+				//positions = System.Text.Encoding.ASCII.GetString (buf);
+				Array.Clear (buf, 0, buf.Length);
+			}
+				
+
+		}
+		catch (Exception ex) {
+			Debug.Log ("Skipped read");
+		}
+
+
+
+
+		
+
+	}
+
+	public bool checkEnd (byte[] buf) {
+		var returnEndMessage = Encoding.ASCII.GetBytes("Return tear down");
+		//Debug.Log (returnEndMessage [0]);
+		bool correct = true;
+		for (int i = 0; i < 16; i++) {
+			
+			if (buf [i*4] != returnEndMessage [i]) {
+				correct = false;
+			}
+		}
+		return correct;
+	}
+
+
+	public void tearDown() {
+		Debug.Log ("Teardown Connection");
+
+		var endMessage = Encoding.ASCII.GetBytes("Tear Down Connection");
+
+		writer.BaseStream.Write(endMessage, 0, endMessage.Length);
+		writer.Flush ();
+		Debug.Log ("Sent");
+		//finished = true;
+
 
 	}
 
@@ -158,40 +270,12 @@ public class TrackedCameraScript : MonoBehaviour {
 		texture.LoadRawTextureData(buffer);
 		texture.Apply();
 		var bytes = texture.EncodeToPNG();
-		File.WriteAllBytes( "D:/Documents/University/CompSci/test1.png",bytes);
+		//File.WriteAllBytes( "D:/Documents/University/CompSci/test1.png",bytes);
 
 
 
-		if (connected) {
-			/*Debug.Log (buffer.Length);
-			Debug.Log (bytes [0]);
-			Debug.Log (bytes [1]);
-			Debug.Log (bytes [2]);
-			Debug.Log (bytes [3]);
-			Debug.Log (bytes [4]);
-			Debug.Log (bytes [5]);
-			Debug.Log (bytes [6]);
-			Debug.Log (bytes [7]);
-			Debug.Log (bytes [8]);
-			Debug.Log (bytes [9]);
-			Debug.Log (bytes [10]);
-			Debug.Log (bytes [11]);
-			Debug.Log (bytes [12]);
-			Debug.Log (bytes [13]);
-			Debug.Log (bytes [14]);
-			Debug.Log (bytes [15]);
-			Debug.Log (bytes [16]);
-			Debug.Log (bytes [17]);
-			Debug.Log (bytes [18]);
-			Debug.Log (bytes [19]);
-			Debug.Log (bytes [20]);
-			Debug.Log (bytes [21]);
-			Debug.Log (bytes [22]);
-			Debug.Log (bytes [23]);
-			Debug.Log (bytes [24]);
-			Debug.Log (bytes [25]);
-			Debug.Log (bytes [26]);
-			Debug.Log (bytes [27]);*/
+		if (connected && finished == false) {
+			
 
 
 			/*Encoding unicode = Encoding.Unicode;
@@ -201,10 +285,25 @@ public class TrackedCameraScript : MonoBehaviour {
 			writer.WriteLine (frameString);*/
 
 			//writer.WriteLine (bytes);
-			writer.BaseStream.Write(bytes, 0, bytes.Length);
-			writer.Flush ();
+			try {
+				writer.BaseStream.Write (bytes, 0, bytes.Length);
+				writer.Flush ();
+			}
+			catch (Exception ex) {
+				Debug.Log ("Error Writing");
+			}
+
 			//Console.WriteLine (reader.ReadLine ());
-		}
+		} /*else if (connected && finished == true && closed == false) {
+			Debug.Log ("Closing writer and client");
+			writer.Close ();
+			client.Close ();
+			closed = true;
+			Debug.Log ("Closed, aborting...");
+			UnityEditor.EditorApplication.isPlaying = false;
+			//REPLACE WITH THIS IN BUILD
+			//Application.Quit();
+		}*/
 		//GetComponent<MeshRenderer>().material.mainTexture = texture;
 		//mat.mainTexture = texture;
 	}
@@ -216,13 +315,18 @@ public class TrackedCameraScript : MonoBehaviour {
 	}
 
 	void OnApplicationQuit() {
+		Debug.Log ("Closing writer and client");
+		writer.Close ();
+		client.Close ();
+		Debug.Log ("Closed, aborting...");
 		Debug.Log ("End prog");
 		finished = true;
 	}
 
 	void updatePositions(){
+		//readIn ();
 		int[] intPosClone = (int[])intPos.Clone ();
-		float[] floatPos = new float[10];
+		float[] floatPos = new float[20];
 
 		/*if (intPosClone [0] == 0) {
 			floatPos [0] = 0f;
@@ -235,8 +339,8 @@ public class TrackedCameraScript : MonoBehaviour {
 			floatPos [3] = 0f;
 		}*/
 
-		for (int i = 0; i < intPosClone [0]; i++) {
-			int x = intPosClone [(4 * i) + 1];
+		for (int i = 0; i < (intPosClone [0]); i++) {
+			/*int x = intPosClone [(4 * i) + 1];
 			int y = intPosClone [(4 * i) + 2];
 			int w = intPosClone [(4 * i) + 3];
 			int h = intPosClone [(4 * i) + 4];
@@ -249,6 +353,22 @@ public class TrackedCameraScript : MonoBehaviour {
 			if (i <5) {
 				floatPos [(2*i)] = xf;
 				floatPos [(2 * i) + 1] = yf;
+			}*/
+
+
+			float xf = Convert.ToSingle(intPosClone [(4 * i) + 1]);
+			float yf = Convert.ToSingle(intPosClone [(4 * i) + 2]);
+			float d = Convert.ToSingle(intPosClone [(4 * i) + 3])/100f;
+			float s = Convert.ToSingle(intPosClone [(4 * i) + 4])/100f;
+
+			xf = (xf - (width / 2)) / width;
+			yf = (yf - (height / 2)) /height;
+			if (i <5) {
+				floatPos [(4*i)] = xf;
+				floatPos [(4 * i) + 1] = yf;
+				floatPos [(4 * i) + 2] = d;
+				floatPos [(4 * i) + 3] = s;
+
 			}
 
 
@@ -261,33 +381,90 @@ public class TrackedCameraScript : MonoBehaviour {
 		Transform sphere4 = GameObject.Find ("Sphere (3)").GetComponent<Transform> ();
 		Transform sphere5 = GameObject.Find ("Sphere (4)").GetComponent<Transform> ();
 
+		Transform cap1 = GameObject.Find ("Capsule").GetComponent<Transform> ();
+		Transform cap2 = GameObject.Find ("Capsule (1)").GetComponent<Transform> ();
+		Transform cap3 = GameObject.Find ("Capsule (2)").GetComponent<Transform> ();
+		Transform cap4 = GameObject.Find ("Capsule (3)").GetComponent<Transform> ();
+		Transform cap5 = GameObject.Find ("Capsule (4)").GetComponent<Transform> ();
+
+		Transform camTrans = GameObject.Find ("Camera (eye)").GetComponent<Transform> ();
+
+
+		float distance = 2f;
+		float size = 1f;
+
+
+		float scale = 1.5f;
+
+
+		Transform[] sphereArray = {sphere1,sphere2,sphere3,sphere4,sphere5};
+
+		Transform[] capArray = {cap1,cap2,cap3,cap4,cap5};
+
+
+		for (int f = 0; f < 5; f++) {
+
+			if (floatPos [f*4] == 0) {
+				sphereArray[f].localPosition = new Vector3 (0, 0, -1.0f);
+			} else {
+				sphereArray[f].localPosition = new Vector3 (floatPos [f*4]*scale, -floatPos [(f*4)+1]*scale, 1.0f);
+			}
+
+			placeFace (sphereArray[f], capArray[f], camTrans, floatPos [(f*4)+2], floatPos [(f*4)+3]);
+
+		}
+
+		
+		/*
+
+
 		if (floatPos [0] == 0) {
 			sphere1.localPosition = new Vector3 (0, 0, -1.0f);
 		} else {
-			sphere1.localPosition = new Vector3 (floatPos [0], -floatPos [1], 1.0f);
+			sphere1.localPosition = new Vector3 (floatPos [0]*scale, -floatPos [1]*scale, 1.0f);
 		}
+			
+		placeFace (sphere1, cap1, camTrans, floatPos [2], floatPos [3]);
 
-		if (floatPos [2] == 0) {
+		
+
+		if (floatPos [4] == 0) {
 			sphere2.localPosition = new Vector3 (0, 0, -1.0f);
 		} else {
-			sphere2.localPosition = new Vector3 (floatPos [2], -floatPos [3], 1.0f);
+			sphere2.localPosition = new Vector3 (floatPos [2]*scale, -floatPos [3]*scale, 1.0f);
 		}
+
+		placeFace (sphere2, cap2, camTrans, distance, size);
+
+
 
 		if (floatPos [4] == 0) {
 			sphere3.localPosition = new Vector3 (0, 0, -1.0f);
 		} else {
-			sphere3.localPosition = new Vector3 (floatPos [4], -floatPos [5], 1.0f);
+			sphere3.localPosition = new Vector3 (floatPos [4]*scale, -floatPos [5]*scale, 1.0f);
 		}
+
+		placeFace (sphere3, cap3, camTrans, distance, size);
+
+
+
 		if (floatPos [6] == 0) {
 			sphere4.localPosition = new Vector3 (0, 0, -1.0f);
 		} else {
-			sphere4.localPosition = new Vector3 (floatPos [6], -floatPos [7], 1.0f);
+			sphere4.localPosition = new Vector3 (floatPos [6]*scale, -floatPos [7]*scale, 1.0f);
 		}
+
+		placeFace (sphere4, cap4, camTrans, distance, size);
+
+
+
 		if (floatPos [8] == 0) {
 			sphere5.localPosition = new Vector3 (0, 0, -1.0f);
 		} else {
-			sphere5.localPosition = new Vector3 (floatPos [8], -floatPos [9], 1.0f);
+			sphere5.localPosition = new Vector3 (floatPos [8]*scale, -floatPos [9]*scale, 1.0f);
 		}
+
+		placeFace (sphere5, cap5, camTrans, distance, size);*/
 
 		/* Debug.Log("String: [" + string.Join(",",stringPos)+"]");
 		//for (int i = 0; i < stringPos.Length; i++) {
@@ -306,9 +483,53 @@ public class TrackedCameraScript : MonoBehaviour {
 
 	}
 
+	void placeFace(Transform sphere, Transform cap, Transform cam,float distance,float size){
+		Vector3 dir1 = (sphere.position - cam.position);
+		dir1.Normalize ();
+		dir1.Scale (new Vector3 (distance, distance, distance));
+		Vector3 facePos = cam.position + (dir1);
+		cap.position = facePos;
+		cap.localScale = new Vector3 (size * 0.2f, size * 0.15f, size * 0.2f);
+
+	}
+
+	void resetPositions() {
+		Transform sphere1 = GameObject.Find ("Sphere").GetComponent<Transform> ();
+		Transform sphere2 = GameObject.Find ("Sphere (1)").GetComponent<Transform> ();
+		Transform sphere3 = GameObject.Find ("Sphere (2)").GetComponent<Transform> ();
+		Transform sphere4 = GameObject.Find ("Sphere (3)").GetComponent<Transform> ();
+		Transform sphere5 = GameObject.Find ("Sphere (4)").GetComponent<Transform> ();
+
+		Transform cap1 = GameObject.Find ("Capsule").GetComponent<Transform> ();
+		Transform cap2 = GameObject.Find ("Capsule (1)").GetComponent<Transform> ();
+		Transform cap3 = GameObject.Find ("Capsule (2)").GetComponent<Transform> ();
+		Transform cap4 = GameObject.Find ("Capsule (3)").GetComponent<Transform> ();
+		Transform cap5 = GameObject.Find ("Capsule (4)").GetComponent<Transform> ();
+
+		Transform camTrans = GameObject.Find ("Camera (eye)").GetComponent<Transform> ();
+
+		Transform[] sphereArray = {sphere1,sphere2,sphere3,sphere4,sphere5};
+		Transform[] capArray = {cap1,cap2,cap3,cap4,cap5};
+
+		for (int f = 0; f < 5; f++) {
+			sphereArray [f].localPosition = new Vector3 (0f, 0f, -1f);
+			placeFace (sphereArray [f], capArray [f], camTrans, 1f, 1f);
+		}
+		
+
+
+
+	}
+		
 
 	void Update()
 	{
+		if (finished) {
+			//UnityEditor.EditorApplication.isPlaying = false;
+			//REPLACE WITH THIS IN BUILD
+			Application.Quit();
+		}
+
 		if (running) {
 			if (count == 0) {
 			
@@ -321,7 +542,27 @@ public class TrackedCameraScript : MonoBehaviour {
 			//TextMesh textObject = GameObject.Find ("FacePosition").GetComponent<TextMesh> ();
 			updatePositions();
 			//textObject.text = positions;
+		} else {
+			resetPositions ();
 		}
+		
+
+		if (connected & connectedIn) {
+			if (running) {
+				leftTrackingText.GetComponent<TextMesh> ().text = "Face Tracking: ON   (Toggle with trigger)";
+				rightTrackingText.GetComponent<TextMesh> ().text = "Face Tracking: ON   (Toggle with trigger)";
+			} else {
+				leftTrackingText.GetComponent<TextMesh> ().text = "Face Tracking: OFF   (Toggle with trigger)";
+				rightTrackingText.GetComponent<TextMesh> ().text = "Face Tracking: OFF   (Toggle with trigger)";
+			}
+
+		} else {
+			leftTrackingText.GetComponent<TextMesh> ().text = "Cannot track faces without python connection.";
+			rightTrackingText.GetComponent<TextMesh> ().text = "Cannot track faces without python connection.";
+
+
+		}
+
 		//Debug.Log ("Started Update");
 		//var buf= new byte[20];
 		//reader.BaseStream.BeginRead(buf,0,20,null,null);
