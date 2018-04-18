@@ -19,6 +19,8 @@ public class TrackedCameraScript : MonoBehaviour {
 	public GameObject rightConnectedText;
 	public GameObject leftTrackingText;
 	public GameObject rightTrackingText;
+	public GameObject leftTestingText;
+	public GameObject rightTestingText;
 
 	CVRTrackedCamera trcam_instance = null;
 	ulong pTrackedCamera = 0;
@@ -44,6 +46,13 @@ public class TrackedCameraScript : MonoBehaviour {
 	uint width = 0;
 	uint height = 0;
 	bool closed = false;
+
+	DateTime startTime = DateTime.MinValue;
+	bool testing = false;
+	string testingController = "";
+	//int testPos = 0;
+	//string[] testData = null;
+	ArrayList testData = new ArrayList();
 	//int[] intPos = new int[200/ 4];
 
 	void Start () {
@@ -323,6 +332,77 @@ public class TrackedCameraScript : MonoBehaviour {
 		finished = true;
 	}
 
+	public void testStart(string controllerName){
+		
+		if (controllerName == "Controller (left)") {
+			testingController = "Controller (right)";
+		} else {
+			testingController = "Controller (left)";
+		}
+
+		Debug.Log ("Start testing by "+ controllerName);
+		Debug.Log ("Testing on "+ testingController);
+		//Grab current time as file name
+		//Set boolean to run on updates
+		startTime = System.DateTime.Now;
+		testing = true;
+		leftTestingText.GetComponent<TextMesh> ().text = "Testing active and recording...";
+		rightTestingText.GetComponent<TextMesh> ().text = "Testing active and recording...";
+
+	}
+
+	void testCycle() {
+		if (testing) {
+			//Get the current error
+			//Add the error to the data structure
+			float error = getError ();
+			if (error != -1.0f) {
+				TimeSpan time = System.DateTime.Now.Subtract (startTime);
+				string line = time.ToString () + "," + error.ToString ();
+				testData.Add (line); 
+				//Debug.Log ("Added line: " + line);
+			}
+		}
+		//testPos++;
+	}
+
+	public void testStop(){
+		Debug.Log ("Stop testing");
+		// Set boolean to not run on updates
+		testing = false;
+		// Grab end time for duration, build the file name
+		DateTime endTime = System.DateTime.Now;
+
+		string fileName = System.DateTime.Now.ToString("yyMMddHHmmss");
+		// Build CSV file out of structure
+		// Reset start and end time
+		// Clear buffer
+		//Type stringType = String;
+
+		File.WriteAllLines("D:/Documents/University/CompSci/Third Year/Part II Project/TestData/" + fileName + ".csv",(string[]) testData.ToArray(typeof(string)));
+		//File.WriteAllBytes( "D:/Documents/University/CompSci/Third Year/Part II Project/TestData",bytes);
+		Debug.Log ("File Written");
+		leftTestingText.GetComponent<TextMesh> ().text = "Tests concluded and data written to file";
+		rightTestingText.GetComponent<TextMesh> ().text = "Tests concluded and data written to file";
+		startTime = DateTime.MinValue;
+		testingController = "";
+		testData.Clear();
+	}
+
+	float getError(){
+		float error = -1.0f;
+		Transform cap1 = GameObject.Find ("Capsule").GetComponent<Transform> ();
+
+		Transform controller = GameObject.Find (testingController).GetComponent<Transform> ();
+		Debug.Log (cap1.localScale);
+		if (cap1.localScale.x != 0.0f) {
+			
+			error = (controller.position - cap1.position).magnitude;
+		} 
+			
+		return error;
+	}
+
 	void updatePositions(){
 		//readIn ();
 		int[] intPosClone = (int[])intPos.Clone ();
@@ -534,6 +614,7 @@ public class TrackedCameraScript : MonoBehaviour {
 			if (count == 0) {
 			
 				Save ();
+				testCycle ();
 				count = 10;
 			} else {
 				count--;

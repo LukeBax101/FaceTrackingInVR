@@ -11,6 +11,12 @@ import numpy as np
 import threading
 import time
 import struct
+import math
+
+
+mp = np.array((2,1), np.float32) # measurement
+tp = np.zeros((2,1), np.float32) # tracked / prediction
+prevFace = [0,0,0]
 
 def loop():
     global first,newimg
@@ -36,6 +42,32 @@ def showChunks(byteData):
     print("Position: " +str(pos))
     print("Length: " + str(len(byteData)))
 
+def predictNext(x,y):
+    global mp,tp,kalman
+    if (not(x==0) and not(y==0)): 
+        mp = np.array([[np.float32(x)],[np.float32(y)]])
+        kalman.correct(mp)
+    tp = kalman.predict()
+    print(tp)
+    #return tp
+
+
+def findNearestFace(faces):
+    minDis = 10000.0
+    count = 0
+    current = 0
+    for (x,y,w,h) in faces:
+        dis = (math.sqrt(((abs(prevFace[0]-x))*(abs(prevFace[0]-x)))+((abs(prevFace[1]-y))*(abs(prevFace[1]-y)))))
+        if (dis<minDis):
+            minDis = dis
+            current = count
+        count = count +1
+    prevFace[0] = faces[current][0]
+    prevFace[1] = faces[current][1]
+    prevFace[2] = faces[current][2]
+    #print(faces[current])
+    return faces[current]
+    
 
 def getLast(byteData):
     lastStartPos = 0
@@ -61,10 +93,15 @@ def getLast(byteData):
         else:
             lastStartPos = pos
     return lastStartPos
-    
 
-face_cascade = cv2.CascadeClassifier('D:/Documents/University/CompSci/FaceDefault.xml')
-eye_cascade = cv2.CascadeClassifier('D:/Documents/University/CompSci/Eye.xml')
+######### Filter booleans ########
+haar = True
+LBP = False
+################################
+
+haar_face_cascade = cv2.CascadeClassifier('D:/Documents/University/CompSci/FaceDefault.xml')
+haar_eye_cascade = cv2.CascadeClassifier('D:/Documents/University/CompSci/Eye.xml')
+lbp_face_cascade = cv2.CascadeClassifier('D:/Documents/University/Compsci/lbpFace.xml')
 
 p = win32pipe.CreateNamedPipe(r'\\.\pipe\OutgoingFrame',
     win32pipe.PIPE_ACCESS_DUPLEX,
@@ -85,6 +122,18 @@ first = True
 newimg = 0
 #time.sleep(15)
 running = True
+
+
+########## Kalman Filter Setup ###########
+
+
+kalman = cv2.KalmanFilter(4,2)
+kalman.measurementMatrix = np.array([[1,0,0,0],[0,1,0,0]],np.float32)
+kalman.transitionMatrix = np.array([[1,0,1,0],[0,1,0,1],[0,0,1,0],[0,0,0,1]],np.float32)
+kalman.processNoiseCov = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]],np.float32) * 0.03
+
+##########################################
+
 while (running):
     try:
         data = win32file.ReadFile(p, 112608000)
@@ -146,27 +195,62 @@ while (running):
         #cv2.rectangle(newimg,(50,50),(100,100),(0,255,0),1)
 
         gray = cv2.cvtColor(newimg, cv2.COLOR_BGR2GRAY)
+        outdata = [0]
+
+        if (haar and not(LBP)):
+            faces = haar_face_cascade.detectMultiScale(gray, 1.3, 5)
+            #print("Haar")
+            outdata = [len(faces)]
+
+            if (len(faces) > 0):
+                (x,y,w,h) = findNearestFace(faces)
+            else:
+                (x,y,w,h) = (0,0,0,prevFace[2])
+            predictNext(x,y)
+            outdata = outdata + [int(int(tp[0]) + (w / 2)),int(int(tp[1]) + (h / 2)),int(0.3*(400-(2*h))),100]
+
+
         
-        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
 
+        if (LBP and not(haar)):
+            #print("LBP Filter here")
+            faces = lbp_face_cascade.detectMultiScale(gray, 1.3, 5)
 
-        outdata = [len(faces)]
-        #print("Faces: " + str(faces))
-        for (x,y,w,h) in faces:
-            cv2.rectangle(newimg,(x,y),(x+w,y+h),(255,0,0),2)
-            roi_gray = gray[y:y+h, x:x+w]
-            roi_color = newimg[y:y+h, x:x+w]
-            eyes = eye_cascade.detectMultiScale(roi_gray)
-            for (ex,ey,ew,eh) in eyes:
-               cv2.rectangle(roi_color,(ex,ey),(ex+ew,ey+eh),(0,255,0),2)
-               
-            outdata = outdata + [int(x + (w / 2)),int(y + (h / 2)),(400-(2*h)),100]
+            outdata = [len(faces)]
+            #print("Faces: " + str(faces))
+            for (x,y,w,h) in faces:
+                
+                cv2.rectangle(newimg,(x,y),(x+w,y+h),(255,0,0),2)
+                roi_gray = gray[y:y+h, x:x+w]
+                roi_color = newimg[y:y+h, x:x+w]
+                eyes = haar_eye_cascade.detectMultiScale(roi_gray)
+                for (ex,ey,ew,eh) in eyes:
+                   cv2.rectangle(roi_color,(ex,ey),(ex+ew,ey+eh),(0,255,0),2)
+                if (len(eyes) == 2):
+                    #print("Eye 1: " + str(eyes[0][0])+","+ str(eyes[0][1]) + "," + str(eyes[0][2])+","+ str(eyes[0][3]))
+                    #print("Eye 2: " + str(eyes[1][0])+","+ str(eyes[1][1]) + "," + str(eyes[1][2])+","+ str(eyes[1][3]))
+                    eye1PosX = eyes[0][0] + (eyes[0][2])/2
+                    eye1PosY = eyes[0][1] + (eyes[0][3])/2
+                    eye2PosX = eyes[1][0] + (eyes[1][2])/2
+                    eye2PosY = eyes[1][1] + (eyes[1][3])/2
+                    eyeXDis = abs(eye2PosX - eye1PosX)
+                    eyeYDis = abs(eye2PosY - eye1PosY)
+                    
+                    eyeDis = int(math.sqrt(((eyeXDis)*(eyeXDis))+((eyeYDis)*(eyeYDis))))
+                    #print(eyeDis)
+                else:
+                    eyeDis = int((4*h)/7)
 
-        #outdata = [3,100,150,300,100,300,300,100,150,450,300,400,75]
+                #print(h)
+                outdata = outdata + [int(x + (w / 2)),int(y + (h / 2)),int(0.3*(400-(3.5*eyeDis))),100]
 
+        if (haar and LBP):
+            print("Combined")
 
-
+        if (not(haar) and not(LBP)):
+            print("No face tracking")
+        
             
         #faces = []
         #b = bytearray(outdata,"ascii")
